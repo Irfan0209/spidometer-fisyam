@@ -1,0 +1,318 @@
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#include <TimeLib.h> // Library untuk waktu
+
+// Include the libraries we need
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+//pin sensor suhu
+#define ONE_WIRE_BUS 2
+
+//pin sensor tegangan
+#define VPINV A0
+
+//pin sensor arus
+#define VPINC A1
+
+#define SCREEN_WIDTH 128 // Lebar layar OLED dalam piksel
+#define SCREEN_HEIGHT 32 // Tinggi layar OLED dalam piksel
+#define OLED_RESET -1    // Pin reset (atau -1 jika tidak digunakan)
+#define SCREEN_ADDRESS 0x3C // Alamat I2C untuk OLED
+
+// Membuat objek display
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature sensors(&oneWire);
+
+bool showTime = true;  // Status untuk menampilkan waktu atau tanggal
+unsigned long previousMillis = 0; // Waktu sebelumnya dalam milidetik
+const unsigned long interval = 5000; // Interval untuk bergantian (5 detik)
+
+//variabel untuk sensor tegangan 
+float tegangan,vout;
+float vref = 5.0;
+float res_bit = 1023.0;
+float R1      = 30000.0;
+float R2      = 7500.0;
+
+//variabel untuk sensor arus
+int sensitivitas = 66;
+int nilaiADC=00;
+int offset = 2500;
+double teganganArus = 00;
+double nilaiArus = 00;
+
+
+enum Mode{
+  MODE_CLOCK,
+  MODE_DATE,
+  MODE_TEMP,
+  MODE_VOLT,
+  MODE_SEND
+};
+Mode mode = MODE_SEND;
+
+// 'pngwing', 40x40px
+const unsigned char send_left [] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 
+  0x00, 0x00, 0x00, 0x01, 0xf0, 0x00, 0x00, 0x00, 0x03, 0xf0, 0x00, 0x00, 0x00, 0x07, 0xf0, 0x00, 
+  0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x00, 0x3f, 0xf0, 0x00, 0x00, 0x00, 0x7f, 0xff, 0xff, 0xf0, 
+  0x01, 0xff, 0xff, 0xff, 0xf0, 0x03, 0xff, 0xff, 0xff, 0xf0, 0x07, 0xff, 0xff, 0xff, 0xf0, 0x0f, 
+  0xff, 0xff, 0xff, 0xf0, 0x0f, 0xff, 0xff, 0xff, 0xf0, 0x07, 0xff, 0xff, 0xff, 0xf0, 0x03, 0xff, 
+  0xff, 0xff, 0xf0, 0x01, 0xff, 0xff, 0xff, 0xf0, 0x00, 0x7f, 0xff, 0xff, 0xf0, 0x00, 0x3f, 0xf0, 
+  0x00, 0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x00, 0x07, 0xf0, 0x00, 0x00, 0x00, 0x03, 0xf0, 0x00, 
+  0x00, 0x00, 0x01, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+// 'pngwing', 40x40px
+const unsigned char send_right [] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 
+  0x00, 0x00, 0x00, 0x00, 0x0f, 0x80, 0x00, 0x00, 0x00, 0x0f, 0xc0, 0x00, 0x00, 0x00, 0x0f, 0xe0, 
+  0x00, 0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x00, 0x0f, 0xfc, 0x00, 0x0f, 0xff, 0xff, 0xfe, 0x00, 
+  0x0f, 0xff, 0xff, 0xff, 0x80, 0x0f, 0xff, 0xff, 0xff, 0xc0, 0x0f, 0xff, 0xff, 0xff, 0xe0, 0x0f, 
+  0xff, 0xff, 0xff, 0xf0, 0x0f, 0xff, 0xff, 0xff, 0xf0, 0x0f, 0xff, 0xff, 0xff, 0xe0, 0x0f, 0xff, 
+  0xff, 0xff, 0xc0, 0x0f, 0xff, 0xff, 0xff, 0x80, 0x0f, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x0f, 
+  0xfc, 0x00, 0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x00, 0x0f, 0xe0, 0x00, 0x00, 0x00, 0x0f, 0xc0, 
+  0x00, 0x00, 0x00, 0x0f, 0x80, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+
+// 'suhu', 32x32px
+const unsigned char logo_suhu [] PROGMEM = {
+  0x00, 0x03, 0x00, 0x00, 0x00, 0x0c, 0x80, 0x00, 0x00, 0x08, 0x40, 0x00, 0x00, 0x10, 0x40, 0x00, 
+  0x00, 0x10, 0x40, 0x00, 0x00, 0x10, 0x40, 0x00, 0x00, 0x10, 0x40, 0x00, 0x00, 0x10, 0x5c, 0x00, 
+  0x00, 0x10, 0x40, 0x00, 0x00, 0x13, 0x58, 0x00, 0x00, 0x13, 0x40, 0x00, 0x00, 0x13, 0x5c, 0x00, 
+  0x00, 0x13, 0x40, 0x00, 0x00, 0x13, 0x40, 0x00, 0x00, 0x13, 0x58, 0x00, 0x00, 0x13, 0x40, 0x00, 
+  0x00, 0x23, 0x20, 0x00, 0x00, 0x23, 0x10, 0x00, 0x00, 0x47, 0x90, 0x00, 0x00, 0x4f, 0x90, 0x00, 
+  0x00, 0x4f, 0x90, 0x00, 0x00, 0x67, 0x90, 0x00, 0x00, 0x20, 0x10, 0x00, 0x00, 0x10, 0x20, 0x00, 
+  0x00, 0x0f, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1e, 0x3c, 0x78, 0xf0, 
+  0x21, 0xc3, 0x87, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x3c, 0x78, 0xf8, 0x00, 0xc1, 0x86, 0x00
+};
+
+
+void setup() {
+  Serial.begin(9600);
+
+  // Start up the library DS13B20
+  sensors.begin();
+  
+  // Inisialisasi OLED
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;); // Jangan lanjutkan, berhenti di sini
+  }
+//   display.display();
+//  delay (1000);
+//  display.clearDisplay();
+
+//  display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
+//    display.setTextColor(SSD1306_WHITE);
+//  display.setCursor(30, 0);
+//  display.println("HAII");
+//    display.setCursor(15, 16);
+//  display.println("fisyam");
+//  display.display();
+  // Set waktu awal (contoh: 10 Desember 2024, pukul 21:30:00)
+  setTime(23, 00, 0, 10, 12, 2024);
+   delay (1000);
+  display.clearDisplay();
+}
+
+void loop() {
+/*  unsigned long currentMillis = millis();
+static int count=1;
+  // Jika sudah melewati 5 detik, ganti status antara waktu dan tanggal
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+  
+  switch(count){
+    case 1 : 
+      mode = MODE_CLOCK;
+    break;
+    case 2 : 
+      mode = MODE_DATE;
+    break;
+    case 3 : 
+      mode = MODE_TEMP;
+    break;
+    case 4 : 
+      mode = MODE_VOLT;
+    break;
+    case 5 : 
+      mode = MODE_SEND;
+      count = 0;
+    break;
+  };
+   count++; // Toggle antara waktu dan tanggal
+}
+*/
+switch(mode){
+  case MODE_CLOCK :
+    display.clearDisplay();
+    showClock();
+  break;
+  case MODE_DATE :
+    display.clearDisplay();
+    showDate();
+  break;
+  case MODE_TEMP :
+    display.clearDisplay();
+    showTemperatur();
+  break;
+  case MODE_VOLT :
+    display.clearDisplay();
+    showVoltage();
+  break;
+  case MODE_SEND :
+    display.clearDisplay();
+    showSend(1);
+  break;
+}
+//Serial.println(String()+"count:"+count);
+  
+}
+
+void showClock(){
+   // Tampilkan waktu tanpa detik
+    String waktu;
+    int jam = hour();
+    int menit = minute();
+    static bool flag;
+    static unsigned long saveTmr=0;
+    unsigned long tmr = millis();
+    if(tmr-saveTmr >500){
+      saveTmr=tmr;
+      flag = !flag;
+    }
+    if(flag){
+       waktu = (jam < 10 ? "0" : "") + String(jam) + ":" +
+                   (menit < 10 ? "0" : "") + String(menit);
+    }else{
+       waktu = (jam < 10 ? "0" : "") + String(jam) + " " +
+                   (menit < 10 ? "0" : "") + String(menit);
+    }
+    //display.clearDisplay();
+    display.setTextSize(4); // Ukuran teks lebih besar untuk jam dan menit
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println(waktu);
+    display.display();
+}
+
+void showDate(){
+  // Tampilkan tanggal
+    int tanggal = day();
+    int bulan = month();
+    int tahun = year();
+    String tanggalStr = (tanggal < 10 ? "0" : "") + String(tanggal) + "/" +
+                        (bulan < 10 ? "0" : "") + String(bulan) + "/" +
+                        String(tahun);
+                        
+    //display.clearDisplay();
+    display.setTextSize(2); // Ukuran teks lebih kecil untuk tanggal
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 10);
+    display.println(tanggalStr);
+    display.display();
+}
+
+void showTemperatur(){
+ /* sensors.requestTemperatures();
+  float tempC = sensors.getTempCByIndex(0);
+
+   // Check if reading was successful
+  if(tempC != DEVICE_DISCONNECTED_C) 
+  {
+    Serial.print("Temperature for the device 1 (index 0) is: ");
+    Serial.println(tempC);
+  } 
+  else
+  {
+    Serial.println("Error: Could not read temperature data");
+  }
+*/
+  //display.clearDisplay();
+  display.drawBitmap(0, 1, logo_suhu, 32, 32, WHITE); 
+  display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(34, 12);
+ // display.print(":");
+  display.print("100.0");//(String)tempC);
+  display.drawCircle(98,14,2,WHITE);
+  display.setCursor(102,12);
+  display.print("C");
+  display.display();
+}
+
+void showSend(uint8_t lamp){
+//  display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
+//  display.setTextColor(SSD1306_WHITE);
+//  display.setCursor(0, 0);
+//  display.print("test send");
+//  display.display();
+ // just intro
+ // display.clearDisplay();
+//  display.setTextColor(SSD1306_WHITE);
+//  display.setTextSize(1);
+//  display.setCursor(38,20);  display.println(F("ARDUCODING"));
+//  display.setCursor(39,35);  display.println(F("TEST ICON"));
+//  display.display(); //tampilkan data
+//  delay(3000); 
+ // display.clearDisplay(); //clear sebelum tampilan baru
+  display.drawBitmap(10, 0, send_left, 40, 40, WHITE); 
+  display.drawBitmap(80, 0, send_right, 40, 40, WHITE); 
+  display.display(); //tampilkan data
+
+ }
+
+void showVoltage(){
+  display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("T:");
+  display.print(voltage());
+  display.println(" V");
+  display.setCursor(0, 16);
+  display.print("A:");
+  display.print(current());
+  display.println(" mA");
+  display.display();
+}
+
+int voltage(){
+//  vout     = (analogRead(vpin) * vref) / res_bit;
+//  tegangan = 2.207 * vout + 0.2129;
+
+//  vout     = analogRead(vpin);
+//  tegangan = ((vout*0.00489) * 5);
+
+  int vin = analogRead(VPINV);
+  vout = (vin * vref) / res_bit;
+  tegangan = vout / (R2/(R1+R2));
+  return tegangan;
+}
+
+float current(){
+  nilaiADC = analogRead(VPINC);
+  teganganArus = (nilaiADC / 1024.0) * 5000;
+  nilaiArus = ((teganganArus - offset)/sensitivitas);
+  return nilaiArus;
+}
