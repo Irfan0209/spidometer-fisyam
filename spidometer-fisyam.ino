@@ -23,6 +23,10 @@
 #define OLED_RESET -1    // Pin reset (atau -1 jika tidak digunakan)
 #define SCREEN_ADDRESS 0x3C // Alamat I2C untuk OLED
 
+#define SEND_LEFT 3
+#define SEND_RIGHT 4
+
+int button[]={SEND_LEFT,SEND_RIGHT};
 // Membuat objek display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -50,6 +54,7 @@ int    offset = 2500;
 double teganganArus = 00;
 double nilaiArus = 00;
 
+float filteredValue = 0;  // Nilai hasil filter
 
 enum Mode{
   MODE_CLOCK,
@@ -59,7 +64,7 @@ enum Mode{
   MODE_CURRENT,
   MODE_SEND
 };
-Mode mode = MODE_TEMP;
+Mode mode = MODE_CURRENT;
 
 // 'pngwing', 40x40px
 const unsigned char send_left [] PROGMEM = {
@@ -227,9 +232,10 @@ const unsigned char sepeda [] PROGMEM = {
 };
 void setup() {
   Serial.begin(9600);
-
+  filteredValue = analogRead(VPINC);
   // Start up the library DS13B20
   sensors.begin();
+  for(int i=0;i<2;i++){pinMode(button[i],OUTPUT);}
   
   // Inisialisasi OLED
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -417,22 +423,23 @@ void showVoltage(){
 
 void showCurrent(){
   static uint32_t saveTmr=0;
-  static bool state=false;
-  static char *nama[]={" mA"," A"};
+  //static bool state=false;
+  static char *nama[]={ "mA","A"};
   
-  if(millis() - saveTmr > 2000){
+  if(millis() - saveTmr > 100){
     saveTmr = millis();
-    state = !state;
-  }
+    //state = !state;
+  
   
   display.drawBitmap(-2, 1, amper, 40, 40, WHITE);
   display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
   display.setTextColor(SSD1306_WHITE); 
   display.setCursor(50, 12);
   //display.print("A:");
-  display.print((state)?999:1);
-  display.println((state)?nama[0]:nama[1]);
+  display.print(current());
+  display.print((current()<1000)?nama[0]:nama[1]);
   display.display();
+  }
 }
 int voltage(){
 //  vout     = (analogRead(vpin) * vref) / res_bit;
@@ -448,8 +455,52 @@ int voltage(){
 }
 
 float current(){
-  nilaiADC = analogRead(VPINC);
-  teganganArus = (nilaiADC / 1024.0) * 5000;
-  nilaiArus = ((teganganArus - offset)/sensitivitas);
-  return nilaiArus;
+  static float alpha = 0.1;
+  //nilaiADC = analogRead(VPINC);
+  // Baca nilai baru dari sensor
+  float rawValue = analogRead(VPINC);
+
+  // Terapkan low-pass filter (EMA)
+  filteredValue = alpha * rawValue + (1 - alpha) * filteredValue;
+
+  // Cetak nilai hasil filter
+  Serial.print("Nilai hasil filter: ");
+  Serial.println(filteredValue);
+
+  float tegangan = filteredValue * 5 / 1023.0;
+
+  float arus = (tegangan - 2.5) / 0.66;
+  if(arus < 0.16){ arus = 0; }
+  return arus;
+}
+
+
+void buttonSend(int buttonPin){
+  static unsigned long startTime = 0; // Waktu ketika tombol ditekan
+  static bool isLedOn = false;        // Status LED
+  static int counter = 0;
+  static bool buttonPressed = false; // Status tombol sebelumnya
+  //onst int buttonPin = 
+  bool currentButtonState = digitalRead(button[buttonPin]) == LOW; // Tombol aktif saat LOW
+
+  // Deteksi perubahan tombol dari tidak ditekan ke ditekan
+  if (currentButtonState && !buttonPressed) {
+    buttonPressed = true; // Catat bahwa tombol sedang ditekan
+    isLedOn = true;       // Nyalakan LED
+    startTime = millis(); // Mulai hitung waktu
+    digitalWrite(ledPin, HIGH); // Hidupkan LED
+    //counter++;
+  } else if (!currentButtonState) {
+    buttonPressed = false; // Reset status tombol
+  }
+  (isLedOn)?mode = MODE_SEND:mode = MODE_CLOCK;
+  if(isLedOn){stateSend = !stateSend;}
+  // Matikan LED jika waktu telah melebihi 5 detik
+  if (isLedOn && millis() - startTime >= 5000) {
+    isLedOn = false;
+    digitalWrite(ledPin, LOW); // Matikan LED
+  }
+  Serial.println(String("counter=")+counter);
+}
+
 }
