@@ -258,10 +258,10 @@ void setup() {
 }
 
 void loop() {
-/*  unsigned long currentMillis = millis();
+  unsigned long currentMillis = millis();
 static int count=1;
   // Jika sudah melewati 5 detik, ganti status antara waktu dan tanggal
-  if (currentMillis - previousMillis >= interval) {
+  if (currentMillis - previousMillis >= interval && mode != MODE_SEND) {
     previousMillis = currentMillis;
   
   switch(count){
@@ -279,15 +279,12 @@ static int count=1;
     break;
     case 5 : 
       mode = MODE_CURRENT;
-    break;
-    case 6 : 
-      mode = MODE_SEND;
       count = 0;
     break;
   };
    count++; // Toggle antara waktu dan tanggal
 }
-*/
+
 switch(mode){
   case MODE_CLOCK :
     display.clearDisplay();
@@ -311,7 +308,7 @@ switch(mode){
   break;
   case MODE_SEND :
     display.clearDisplay();
-    showSend(1);
+    showSend(buttonPin,buttonPin);
   break;
 }
 //Serial.println(String()+"count:"+count);
@@ -393,20 +390,22 @@ void showTemperatur(){
   display.display();
 }
 
-void showSend(uint8_t lamp){
-  static uint32_t saveTmr=0;
-  static bool state=false;
+void showSend(uint8_t Direction,uint8_t Mode){
+//  static uint32_t saveTmr=0;
+//  static bool state=false;
 
-  if(millis() - saveTmr > 500){
-    saveTmr = millis();
-    state = !state;
+//  if(millis() - saveTmr > 500){
+//    saveTmr = millis();
+//    state = !state;
+//  }
+  if(Mode){
+    (Direction)?display.drawBitmap(90, 0, send_right, 40, 40, WHITE):display.drawBitmap(0, 0, send_left, 40, 40, WHITE); 
+    display.drawBitmap(50, 0, icon_lamp, 32, 32, WHITE);
+  }else{
+    (Direction)?display.drawBitmap(90, 0, send_right, 40, 40, BLACK):display.drawBitmap(0, 0, send_left, 40, 40, BLACK);
+    display.drawBitmap(50, 0, icon_lamp, 32, 32, BLACK)
   }
-  //display.drawBitmap(50, 0, icon_lamp, 32, 32, WHITE); 
-  (state)?display.drawBitmap(0, 0, send_left, 40, 40, WHITE):display.drawBitmap(0, 0, send_left, 40, 40, BLACK); 
-  (state)?display.drawBitmap(50, 0, icon_lamp, 32, 32, WHITE):display.drawBitmap(44, 0, icon_off, 32, 32, WHITE);
-  //(state)?display.drawBitmap(90, 0, send_right, 40, 40, WHITE):display.drawBitmap(90, 0, send_right, 40, 40, BLACK);
-  //display.drawBitmap(0, 0, send_left, 40, 40, WHITE);
-  display.drawBitmap(90, 0, send_right, 40, 40, WHITE); 
+
   display.display(); //tampilkan data
 
  }
@@ -480,25 +479,37 @@ void buttonSend(int buttonPin){
   static bool isLedOn = false;        // Status LED
   static int counter = 0;
   static bool buttonPressed = false; // Status tombol sebelumnya
-  //onst int buttonPin = 
-  bool currentButtonState = digitalRead(button[buttonPin]) == LOW; // Tombol aktif saat LOW
+ 
+  bool currentButtonState;//= digitalRead(button[buttonPin]) == LOW; // Tombol aktif saat LOW
+  
+  if(digitalRead(button[0]) == LOW){ currentButtonState = digitalRead(button[0]) == LOW; }
+  else if(digitalRead(button[1]) == LOW){ currentButtonState = digitalRead(button[1]) == LOW }
+  else{ currentButtonState = HIGH; }
+  
 
   // Deteksi perubahan tombol dari tidak ditekan ke ditekan
   if (currentButtonState && !buttonPressed) {
     buttonPressed = true; // Catat bahwa tombol sedang ditekan
     isLedOn = true;       // Nyalakan LED
     startTime = millis(); // Mulai hitung waktu
-    digitalWrite(ledPin, HIGH); // Hidupkan LED
+   
     //counter++;
   } else if (!currentButtonState) {
     buttonPressed = false; // Reset status tombol
   }
-  (isLedOn)?mode = MODE_SEND:mode = MODE_CLOCK;
-  if(isLedOn){stateSend = !stateSend;}
+  //(isLedOn)?mode = MODE_SEND:mode = MODE_CLOCK;
+  if(isLedOn){
+    mode = MODE_SEND;
+   // showSend(buttonPin,buttonPin);
+  }else{
+    mode = MODE_CLOCK;
+  }
+  //if(isLedOn){stateSend = !stateSend;}
+  
   // Matikan LED jika waktu telah melebihi 5 detik
   if (isLedOn && millis() - startTime >= 5000) {
     isLedOn = false;
-    digitalWrite(ledPin, LOW); // Matikan LED
+//    digitalWrite(ledPin, LOW); // Matikan LED
   }
   Serial.println(String("counter=")+counter);
 }
