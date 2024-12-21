@@ -5,6 +5,11 @@
 
 #include <TimeLib.h> // Library untuk waktu
 
+#include "OneButton.h"
+
+OneButton INP_LEFT(3,true);
+OneButton INP_RIGHT(4,true);
+
 // Include the libraries we need
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -23,10 +28,10 @@
 #define OLED_RESET -1    // Pin reset (atau -1 jika tidak digunakan)
 #define SCREEN_ADDRESS 0x3C // Alamat I2C untuk OLED
 
-#define SEND_LEFT 3
-#define SEND_RIGHT 4
-
-int button[]={SEND_LEFT,SEND_RIGHT};
+//#define SEND_LEFT 3
+//#define SEND_RIGHT 4
+//
+//int button[]={SEND_LEFT,SEND_RIGHT};
 // Membuat objek display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -56,6 +61,10 @@ double nilaiArus = 00;
 
 float filteredValue = 0;  // Nilai hasil filter
 
+bool currentButtonState;
+bool isLedOn = false;
+unsigned long startTime = 0;
+
 enum Mode{
   MODE_CLOCK,
   MODE_DATE,
@@ -64,7 +73,7 @@ enum Mode{
   MODE_CURRENT,
   MODE_SEND
 };
-Mode mode = MODE_CURRENT;
+Mode mode = MODE_CLOCK;
 
 // 'pngwing', 40x40px
 const unsigned char send_left [] PROGMEM = {
@@ -230,12 +239,60 @@ const unsigned char sepeda [] PROGMEM = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
+
+int stateDirrection=0;//0 = left 1 = right
+bool stateModeSend=false;
+
+void sendRightStart(){
+  
+}
+
+void sendRightOn(){
+   mode = MODE_SEND;
+   stateDirrection = 1;
+   stateModeSend = true;
+   isLedOn = true;
+  startTime = millis();
+ 
+}
+
+void sendRightOff(){
+  stateDirrection = 1;
+  stateModeSend = false;
+}
+
+void sendLeftStart(){
+   
+}
+
+void sendLeftOn(){
+  mode = MODE_SEND;
+  stateDirrection = 0;
+  stateModeSend = true;
+  isLedOn = true;
+  startTime = millis();
+}
+
+void sendLeftOff(){
+  stateDirrection = 0;
+  stateModeSend = false;
+}
+
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   filteredValue = analogRead(VPINC);
   // Start up the library DS13B20
   sensors.begin();
-  for(int i=0;i<2;i++){pinMode(button[i],OUTPUT);}
+ // for(int i=0;i<2;i++){pinMode(button[i],OUTPUT);}
+  INP_LEFT.attachClick(sendLeftStart);
+  INP_LEFT.attachLongPressStart(sendLeftOn);
+  INP_LEFT.attachLongPressStop(sendLeftOff);
+  //button1.attachDuringLongPress(longPress1);
+  
+  INP_RIGHT.attachClick(sendRightStart);
+  INP_RIGHT.attachLongPressStart(sendRightOn);
+  INP_RIGHT.attachLongPressStop(sendRightOff);
+  //button1.attachDuringLongPress(longPress1);
   
   // Inisialisasi OLED
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -258,8 +315,12 @@ void setup() {
 }
 
 void loop() {
+
+  INP_LEFT.tick();
+ INP_RIGHT.tick();
   unsigned long currentMillis = millis();
-static int count=1;
+ 
+static int count=0;
   // Jika sudah melewati 5 detik, ganti status antara waktu dan tanggal
   if (currentMillis - previousMillis >= interval && mode != MODE_SEND) {
     previousMillis = currentMillis;
@@ -308,7 +369,7 @@ switch(mode){
   break;
   case MODE_SEND :
     display.clearDisplay();
-    showSend(buttonPin,buttonPin);
+    buttonSend();
   break;
 }
 //Serial.println(String()+"count:"+count);
@@ -390,20 +451,28 @@ void showTemperatur(){
   display.display();
 }
 
-void showSend(uint8_t Direction,uint8_t Mode){
-//  static uint32_t saveTmr=0;
-//  static bool state=false;
-
-//  if(millis() - saveTmr > 500){
-//    saveTmr = millis();
-//    state = !state;
-//  }
+void showSend(int Direction,uint8_t Mode){
   if(Mode){
-    (Direction)?display.drawBitmap(90, 0, send_right, 40, 40, WHITE):display.drawBitmap(0, 0, send_left, 40, 40, WHITE); 
+    if(Direction){
+      display.drawBitmap(90, 0, send_right, 40, 40, WHITE);//kanan hidup
+      display.drawBitmap(0, 0, send_left, 40, 40, WHITE);//kiri hidup
+     }
+    else{
+      display.drawBitmap(0, 0, send_left, 40, 40, WHITE);//kiri hidup
+      display.drawBitmap(90, 0, send_right, 40, 40, WHITE);//kanan hidup
+    }
     display.drawBitmap(50, 0, icon_lamp, 32, 32, WHITE);
   }else{
-    (Direction)?display.drawBitmap(90, 0, send_right, 40, 40, BLACK):display.drawBitmap(0, 0, send_left, 40, 40, BLACK);
-    display.drawBitmap(50, 0, icon_lamp, 32, 32, BLACK)
+    //(Direction)?display.drawBitmap(90, 0, send_right, 40, 40, BLACK):display.drawBitmap(0, 0, send_left, 40, 40, BLACK);
+    if(Direction){
+      display.drawBitmap(90, 0, send_right, 40, 40, BLACK);//kanan mati
+      display.drawBitmap(0, 0, send_left, 40, 40, WHITE);//KIRI HIDUP
+     }
+    else{
+      display.drawBitmap(0, 0, send_left, 40, 40, BLACK);
+      display.drawBitmap(90, 0, send_right, 40, 40, WHITE);
+    }
+    display.drawBitmap(50, 0, icon_off, 32, 32, WHITE);
   }
 
   display.display(); //tampilkan data
@@ -474,44 +543,23 @@ float current(){
 }
 
 
-void buttonSend(int buttonPin){
-  static unsigned long startTime = 0; // Waktu ketika tombol ditekan
-  static bool isLedOn = false;        // Status LED
+void buttonSend(){
+//  static unsigned long startTime = 0; // Waktu ketika tombol ditekan
+//  static bool isLedOn = false;        // Status LED
   static int counter = 0;
   static bool buttonPressed = false; // Status tombol sebelumnya
- 
-  bool currentButtonState;//= digitalRead(button[buttonPin]) == LOW; // Tombol aktif saat LOW
   
-  if(digitalRead(button[0]) == LOW){ currentButtonState = digitalRead(button[0]) == LOW; }
-  else if(digitalRead(button[1]) == LOW){ currentButtonState = digitalRead(button[1]) == LOW }
-  else{ currentButtonState = HIGH; }
-  
-
-  // Deteksi perubahan tombol dari tidak ditekan ke ditekan
-  if (currentButtonState && !buttonPressed) {
-    buttonPressed = true; // Catat bahwa tombol sedang ditekan
-    isLedOn = true;       // Nyalakan LED
-    startTime = millis(); // Mulai hitung waktu
-   
-    //counter++;
-  } else if (!currentButtonState) {
-    buttonPressed = false; // Reset status tombol
-  }
-  //(isLedOn)?mode = MODE_SEND:mode = MODE_CLOCK;
   if(isLedOn){
-    mode = MODE_SEND;
-   // showSend(buttonPin,buttonPin);
-  }else{
-    mode = MODE_CLOCK;
+    
+    showSend(stateDirrection,stateModeSend);
+    Serial.println(String("stateDirrection=")+stateDirrection);
+    Serial.println(String("stateModeSend  =")+stateModeSend);
   }
-  //if(isLedOn){stateSend = !stateSend;}
   
   // Matikan LED jika waktu telah melebihi 5 detik
   if (isLedOn && millis() - startTime >= 5000) {
     isLedOn = false;
-//    digitalWrite(ledPin, LOW); // Matikan LED
+    mode = MODE_CLOCK;
   }
-  Serial.println(String("counter=")+counter);
-}
-
+  
 }
