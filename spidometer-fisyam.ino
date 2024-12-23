@@ -1,20 +1,20 @@
-#include <SPI.h>
+
+
+//library LCD
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#include "RTClib.h"
+#include "RTClib.h" //library sensor RTC
 
-#include "OneButton.h"
+#include "OneButton.h" //library tombol
 
-OneButton INP_LEFT(3,true);
-OneButton INP_RIGHT(4,true);
-
-// Include the libraries we need
+// library sensor suhu DS18B20
+#include <SPI.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-#include "Icon.h"
+#include "Icon.h" //masukkan file icon 
 
 //pin sensor suhu
 #define ONE_WIRE_BUS 2
@@ -25,6 +25,13 @@ OneButton INP_RIGHT(4,true);
 //pin sensor arus
 #define VPINC A1
 
+//pin sein kiri
+#define SEIN_LEFT 3
+
+//pin sein kanan
+#define SEIN_RIGHT 4
+
+//settingan ukuran lcd dan alamat
 #define SCREEN_WIDTH 128 // Lebar layar OLED dalam piksel
 #define SCREEN_HEIGHT 32 // Tinggi layar OLED dalam piksel
 #define OLED_RESET -1    // Pin reset (atau -1 jika tidak digunakan)
@@ -39,13 +46,18 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 
+//objek untuk sensor RTC
 RTC_DS3231 rtc;
-
 DateTime now;
 
-bool                showTime = true;  // Status untuk menampilkan waktu atau tanggal
+//membuat objek untuk input sein
+OneButton INP_LEFT(SEIN_LEFT,true);
+OneButton INP_RIGHT(SEIN_RIGHT,true);
+
+//variabel untuk animasi
+bool                showTime         = true;  // Status untuk menampilkan waktu atau tanggal
 unsigned long       saveTmrAnimation = 0; // Waktu sebelumnya dalam milidetik
-const unsigned long delayAnimation = 4000; // Interval untuk bergantian (5 detik)
+int                 delayAnimation   = 4000; // rubah nilai ini untuk mengatur kecepatan pergantian animasi
 
 //variabel untuk sensor tegangan 
 float tegangan,vout;
@@ -59,15 +71,19 @@ float filteredValue = 0;  // Nilai hasil filter
 
 //variabel untuk menu sein
 bool currentButtonState;
-bool isLedOn = false;
+bool isLedOn            = false;
 unsigned long startTime = 0;
-bool stateDirrection=0;//0 = left 1 = right
-bool stateModeSein=false;
+bool stateDirrection    =0;//0 = left 1 = right
+bool stateModeSein      = false;
 
-bool stateRTC = 1;
+//variabel sensor RTC
+bool stateRTC      = 1;
+
+//variabel untuk animasi suhu tinggi
 bool stateOverheat = 0;
-float maxTemp = 40.00;
+float maxTemp      = 40.00;
 
+//membuat variabel mode
 enum Mode{
   MODE_CLOCK,
   MODE_DATE,
@@ -79,15 +95,12 @@ enum Mode{
 };
 Mode mode;
 
-
-
 void sendRightOn(){
-   if(!stateOverheat){mode = MODE_SEIN;}
-   stateDirrection = 1;
-   stateModeSein = true;
-   isLedOn = true;
-   startTime = millis();
- 
+  if(!stateOverheat){ mode = MODE_SEIN; }
+  stateDirrection = 1;
+  stateModeSein = true;
+  isLedOn = true;
+  startTime = millis();
 }
 
 void sendRightOff(){
@@ -96,7 +109,7 @@ void sendRightOff(){
 }
 
 void sendLeftOn(){
-  if(!stateOverheat){mode = MODE_SEIN;}
+  if(!stateOverheat){ mode = MODE_SEIN; }
   stateDirrection = 0;
   stateModeSein = true;
   isLedOn = true;
@@ -108,18 +121,11 @@ void sendLeftOff(){
   stateModeSein = false;
 }
 
-
 void setup() {
   Serial.begin(115200);
-  filteredValue = analogRead(VPINC);
-  // Start up the library DS13B20
-  sensors.begin();
-  if(! rtc.begin()){
-    stateRTC = 0;
-  }
-
   
-
+  sensors.begin(); // Start up the library DS13B20
+  
   INP_LEFT.attachLongPressStart(sendLeftOn);
   INP_LEFT.attachLongPressStop(sendLeftOff);
   
@@ -133,17 +139,21 @@ void setup() {
   }
 
   display.clearDisplay();
-  
- if(rtc.lostPower() && stateRTC == 1) {
-    display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(5, 0); 
-    display.print("!  RTC  !");
-    display.setCursor(0, 17); 
-    display.print("LOST POWER");
-    display.display();
-    delay(10000);
-  }
+
+ //Inisialisasi sensor RTC
+  if(!rtc.begin()){ stateRTC = 0; }
+
+ //mengecek apakah sensor RTC telah kehilangan daya baterai saat sensor tidak menerima tegangan eksternal
+  if(rtc.lostPower() && stateRTC == 1) {
+     display.setTextSize(2); 
+     display.setTextColor(SSD1306_WHITE);
+     display.setCursor(5, 0); 
+     display.print("!  RTC  !");
+     display.setCursor(0, 17); 
+     display.print("LOST POWER");
+     display.display();
+     delay(10000);
+   }
   
   display.clearDisplay();
 }
@@ -153,8 +163,8 @@ void loop() {
  INP_LEFT.tick();
  INP_RIGHT.tick();
  
- static int count=0;
- unsigned long tmr = millis();
+ static uint8_t count = 0;
+ uint32_t tmr         = millis();
   
   if (tmr - saveTmrAnimation >= delayAnimation && mode != MODE_SEIN  && stateOverheat == false) {
     saveTmrAnimation = tmr;
@@ -184,7 +194,6 @@ switch(mode){
   case MODE_CLOCK :
     display.clearDisplay();
     showClock();
-   // showHighTemperature();
   break;
   case MODE_DATE :
     display.clearDisplay();
@@ -211,12 +220,14 @@ switch(mode){
     showHighTemperature();
   break;
 }
-Serial.println(String("stateOverheat:")+stateOverheat);
+//Serial.println(String("stateOverheat:")+stateOverheat);
 }
 
+//menampilkan jam diLCD
 void showClock(){
-   // Tampilkan waktu tanpa detik
+   
    if (stateOverheat) return;
+
     now = rtc.now();
     String waktu;
     int jam = now.hour();
@@ -228,8 +239,9 @@ void showClock(){
 
     sprintf(Jam,"%02d",jam);
     sprintf(Menit,"%02d",menit);
+
   if(stateRTC){ 
-    display.setTextSize(4); // Ukuran teks lebih besar untuk jam dan menit
+    display.setTextSize(4); 
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(3, 1); display.print(Jam);
     display.setCursor(77, 1); display.print(Menit);
@@ -252,9 +264,11 @@ void showClock(){
   display.display();
 }
 
+//menampilkan tanggal diLCD
 void showDate(){
-  // Tampilkan tanggal
+
     if(stateOverheat) return;
+
     now = rtc.now();
     int tanggal = now.day();
     int bulan = now.month();
@@ -264,40 +278,33 @@ void showDate(){
                         String(tahun);
                         
   if(stateRTC){
-    display.setTextSize(2); // Ukuran teks lebih kecil untuk tanggal
+    display.setTextSize(2); 
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 10);
     display.println(tanggalStr);
   }else{
     display.drawBitmap(45, -4, icon_kalender_error, 31, 40, WHITE); 
-   // display.display();
   }
   display.display();
 }
 
+//mengambil data suhu
 float requestTemp(){
+
   sensors.requestTemperatures();
+
   float tempC = sensors.getTempCByIndex(0);
 
   return tempC;
 }
 
-void cekTemp(){
-  float tempC = requestTemp();
-  if(tempC > 45.00){
-    stateOverheat = 1;
-    mode = MODE_WARNING;
-  }else{
-    stateOverheat = 0;
-    //mode = MODE_CLOCK;
-  }
-}
-
+//menampilkan suhu diLCD
 void showTemperatur(){
+
   if(stateOverheat) return;
   
   float tempC = requestTemp();
-   // Check if reading was successful
+
   if(tempC != DEVICE_DISCONNECTED_C) 
   {
     display.drawBitmap(0, 1, icon_temp, 32, 32, WHITE); 
@@ -310,6 +317,7 @@ void showTemperatur(){
     display.print("C");
     Serial.print("Temperature for the device 1 (index 0) is: ");
     Serial.println(tempC);
+
     if(tempC >= maxTemp){
     stateOverheat = 1;
     mode = MODE_WARNING;
@@ -323,6 +331,7 @@ void showTemperatur(){
   display.display();
 }
 
+//menampilkan sein diLCD
 void showSein(bool Direction,bool Mode){
   if(Mode){
     if(Direction){
@@ -348,8 +357,11 @@ void showSein(bool Direction,bool Mode){
   display.display(); //tampilkan data
  }
 
+//menampilkan tegangan aki diLCD
 void showVoltage(){
+
   if(stateOverheat) return;
+
   display.drawBitmap(0, 0, icon_petir, 40, 42, WHITE); 
   display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
   display.setTextColor(SSD1306_WHITE);
@@ -359,24 +371,28 @@ void showVoltage(){
   display.display();
 }
 
+//menampilkan nilai arus diLCD
 void showCurrent(){
+
   if(stateOverheat) return;
+
   static uint32_t saveTmr=0;
   static char *nama[]={ "mA","A"};
   
   if(millis() - saveTmr > 100){
     saveTmr = millis();
     
-  display.drawBitmap(-2, 1, icon_ampere, 40, 40, WHITE);
-  display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
-  display.setTextColor(SSD1306_WHITE); 
-  display.setCursor(50, 12);
-  //display.print("A:");
-  display.print(current());
-  display.print((current()<1000)?nama[0]:nama[1]);
-  display.display();
+    display.drawBitmap(-2, 1, icon_ampere, 40, 40, WHITE);
+    display.setTextSize(2); 
+    display.setTextColor(SSD1306_WHITE); 
+    display.setCursor(50, 12);
+    display.print(current());
+    display.print((current()<1000)?nama[0]:nama[1]);
+    display.display();
   }
 }
+
+//menghitung nilai tegangan dari resistor pembagi
 int voltage(){
 //  vout     = (analogRead(vpin) * vref) / res_bit;
 //  tegangan = 2.207 * vout + 0.2129;
@@ -390,12 +406,13 @@ int voltage(){
   return tegangan;
 }
 
+//menampilkan peringatan suhu tinggi diLCD
 void showHighTemperature(){
   static uint32_t saveTmr = 0;
   static bool flag = false;
   uint32_t tmr = millis();
   float tempC = requestTemp();
-  if(tempC == DEVICE_DISCONNECTED_C){tempC = 0; }
+  if(tempC == DEVICE_DISCONNECTED_C){ tempC = 0; }
    
   if(tmr - saveTmr > 100){
     saveTmr = tmr;
@@ -410,6 +427,8 @@ void showHighTemperature(){
   Serial.println(String("temp:")+tempC);
   if(tempC < maxTemp){stateOverheat = 0; mode = MODE_CLOCK; }
 }
+
+//menghitung nilai arus dari sensor arus ACS817
 float current(){
   static float alpha = 0.1;
   float rawValue = analogRead(VPINC);
@@ -418,8 +437,8 @@ float current(){
   filteredValue = alpha * rawValue + (1 - alpha) * filteredValue;
 
   // Cetak nilai hasil filter
-  Serial.print("Nilai hasil filter: ");
-  Serial.println(filteredValue);
+  // Serial.print("Nilai hasil filter: ");
+  // Serial.println(filteredValue);
 
   float tegangan = filteredValue * 5 / 1023.0;
 
@@ -428,7 +447,7 @@ float current(){
   return arus;
 }
 
-
+//menghitung waktu tampil mode sain diLCD
 void buttonSend(){
   if(isLedOn){
     
