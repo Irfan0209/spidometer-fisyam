@@ -60,6 +60,7 @@ bool stateModeSein=false;
 
 bool stateRTC = 1;
 bool stateOverheat = 0;
+float maxTemp = 40.00;
 
 enum Mode{
   MODE_CLOCK,
