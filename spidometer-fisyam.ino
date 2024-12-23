@@ -59,6 +59,7 @@ bool stateDirrection=0;//0 = left 1 = right
 bool stateModeSein=false;
 
 bool stateRTC = 1;
+bool stateOverheat = 0;
 
 enum Mode{
   MODE_CLOCK,
@@ -326,7 +327,7 @@ const unsigned char icon_kalender_error [] PROGMEM = {
 };
 
 void sendRightOn(){
-   mode = MODE_SEIN;
+   if(!stateOverheat){mode = MODE_SEIN;}
    stateDirrection = 1;
    stateModeSein = true;
    isLedOn = true;
@@ -340,7 +341,7 @@ void sendRightOff(){
 }
 
 void sendLeftOn(){
-  mode = MODE_SEIN;
+  if(!stateOverheat){mode = MODE_SEIN;}
   stateDirrection = 0;
   stateModeSein = true;
   isLedOn = true;
@@ -394,7 +395,7 @@ void loop() {
 
  unsigned long tmr = millis();
   
-  if (tmr - saveTmrAnimation >= delayAnimation && mode != MODE_SEIN) {
+  if (tmr - saveTmrAnimation >= delayAnimation && mode != MODE_SEIN  && stateOverheat == false) {
     saveTmrAnimation = tmr;
   
   switch(count){
@@ -412,10 +413,6 @@ void loop() {
     break;
     case 5 : 
       mode = MODE_CURRENT;
-      //count = 0;
-    break;
-     case 6 : 
-      mode = MODE_WARNING;
       count = 0;
     break;
   };
@@ -453,11 +450,12 @@ switch(mode){
     showHighTemperature();
   break;
 }
-
+Serial.println(String("stateOverheat:")+stateOverheat);
 }
 
 void showClock(){
    // Tampilkan waktu tanpa detik
+   if (stateOverheat) return;
     String waktu;
     int jam = hour();
     int menit = minute();
@@ -494,6 +492,7 @@ void showClock(){
 
 void showDate(){
   // Tampilkan tanggal
+    if(stateOverheat) return;
     int tanggal = day();
     int bulan = month();
     int tahun = year();
@@ -513,10 +512,28 @@ void showDate(){
   display.display();
 }
 
-void showTemperatur(){
+float requestTemp(){
   sensors.requestTemperatures();
   float tempC = sensors.getTempCByIndex(0);
 
+  return tempC;
+}
+
+void cekTemp(){
+  float tempC = requestTemp();
+  if(tempC > 45.00){
+    stateOverheat = 1;
+    mode = MODE_WARNING;
+  }else{
+    stateOverheat = 0;
+    //mode = MODE_CLOCK;
+  }
+}
+
+void showTemperatur(){
+  if(stateOverheat) return;
+  
+  float tempC = requestTemp();
    // Check if reading was successful
   if(tempC != DEVICE_DISCONNECTED_C) 
   {
@@ -530,6 +547,10 @@ void showTemperatur(){
     display.print("C");
     Serial.print("Temperature for the device 1 (index 0) is: ");
     Serial.println(tempC);
+    if(tempC >= maxTemp){
+    stateOverheat = 1;
+    mode = MODE_WARNING;
+    }
   } 
   else
   {
@@ -575,6 +596,7 @@ void showSein(bool Direction,bool Mode){
  }
 
 void showVoltage(){
+  if(stateOverheat) return;
   display.drawBitmap(0, 0, icon_petir, 40, 42, WHITE); 
   display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
   display.setTextColor(SSD1306_WHITE);
@@ -585,6 +607,7 @@ void showVoltage(){
 }
 
 void showCurrent(){
+  if(stateOverheat) return;
   static uint32_t saveTmr=0;
   static char *nama[]={ "mA","A"};
   
@@ -618,16 +641,21 @@ void showHighTemperature(){
   static uint32_t saveTmr = 0;
   static bool flag = false;
   uint32_t tmr = millis();
-  if(tmr - saveTmr > 500){
+  float tempC = requestTemp();
+  if(tempC == DEVICE_DISCONNECTED_C){tempC = 0; }
+   
+  if(tmr - saveTmr > 100){
     saveTmr = tmr;
     flag = !flag;
+    display.drawBitmap(0, 7, icon_warning, 26, 26, WHITE);//:display.drawBitmap(0, 7, icon_warning, 26, 26, BLACK); 
+    display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
+    (flag)?display.setTextColor(SSD1306_WHITE):display.setTextColor(SSD1306_BLACK);
+    display.setCursor(31, 12);
+    display.print("OVERHEAT");
+    display.display();
   }
-  display.drawBitmap(0, 7, icon_warning, 26, 26, WHITE);//:display.drawBitmap(0, 7, icon_warning, 26, 26, BLACK); 
-  display.setTextSize(2); // Ukuran teks lebih besar untuk jam dan menit
-  (flag)?display.setTextColor(SSD1306_WHITE):display.setTextColor(SSD1306_BLACK);
-  display.setCursor(31, 12);
-  display.print("OVERHEAT");
-  display.display();
+  Serial.println(String("temp:")+tempC);
+  if(tempC < maxTemp){stateOverheat = 0; mode = MODE_CLOCK; }
 }
 float current(){
   static float alpha = 0.1;
