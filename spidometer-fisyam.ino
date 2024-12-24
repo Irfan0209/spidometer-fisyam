@@ -1,4 +1,29 @@
+/*
+PIN SENSOR                       PIN ARDUINO
 
+#LCD
+SDA                              A4
+SCL                              A5
+
+#RTC
+SDA                              A4
+SCL                              A5
+
+#DS18B20
+MERAH                            GND
+HITAM                            GND
+KUNING                           VCC -> 4K7 -> 2
+
+#ACS178
+VOUT                             A1
+
+#SENSOR TEGANGAN
+VOUT                             A0
+
+#INPUT SEIN KIRI                 3
+
+#INPUT SEIN KANAN                4
+*/
 
 //library LCD
 #include <Wire.h>
@@ -31,6 +56,9 @@
 //pin sein kanan
 #define SEIN_RIGHT 4
 
+//pin sein hazzard
+#define HAZZARD 5
+
 //settingan ukuran lcd dan alamat
 #define SCREEN_WIDTH 128 // Lebar layar OLED dalam piksel
 #define SCREEN_HEIGHT 32 // Tinggi layar OLED dalam piksel
@@ -53,6 +81,7 @@ DateTime now;
 //membuat objek untuk input sein
 OneButton INP_LEFT(SEIN_LEFT,true);
 OneButton INP_RIGHT(SEIN_RIGHT,true);
+OneButton INP_HAZZARD(HAZZARD,true);
 
 //variabel untuk animasi
 bool                showTime         = true;  // Status untuk menampilkan waktu atau tanggal
@@ -73,7 +102,7 @@ float filteredValue = 0;  // Nilai hasil filter
 bool currentButtonState;
 bool isLedOn            = false;
 unsigned long startTime = 0;
-bool stateDirrection    =0;//0 = left 1 = right
+uint8_t stateDirrection = 0;//0 = left 1 = right 2 = hazzard
 bool stateModeSein      = false;
 
 //variabel sensor RTC
@@ -95,7 +124,7 @@ enum Mode{
 };
 Mode mode;
 
-void sendRightOn(){
+void seinRightOn(){
   if(!stateOverheat){ mode = MODE_SEIN; }
   stateDirrection = 1;
   stateModeSein = true;
@@ -103,12 +132,12 @@ void sendRightOn(){
   startTime = millis();
 }
 
-void sendRightOff(){
+void seinRightOff(){
   stateDirrection = 1;
   stateModeSein = false;
 }
 
-void sendLeftOn(){
+void seinLeftOn(){
   if(!stateOverheat){ mode = MODE_SEIN; }
   stateDirrection = 0;
   stateModeSein = true;
@@ -116,8 +145,21 @@ void sendLeftOn(){
   startTime = millis();
 }
 
-void sendLeftOff(){
+void seinLeftOff(){
   stateDirrection = 0;
+  stateModeSein = false;
+}
+
+void seinHazzardOn(){
+  if(!stateOverheat){ mode = MODE_SEIN; }
+  stateDirrection = 2;
+  stateModeSein = true;
+  isLedOn = true;
+  startTime = millis();
+}
+
+void seinHazzardOff(){
+  stateDirrection = 2;
   stateModeSein = false;
 }
 
@@ -126,11 +168,14 @@ void setup() {
   
   sensors.begin(); // Start up the library DS13B20
   
-  INP_LEFT.attachLongPressStart(sendLeftOn);
-  INP_LEFT.attachLongPressStop(sendLeftOff);
+  INP_LEFT.attachLongPressStart(seinLeftOn);
+  INP_LEFT.attachLongPressStop(seinLeftOff);
   
-  INP_RIGHT.attachLongPressStart(sendRightOn);
-  INP_RIGHT.attachLongPressStop(sendRightOff);
+  INP_RIGHT.attachLongPressStart(seinRightOn);
+  INP_RIGHT.attachLongPressStop(seinRightOff);
+
+  INP_HAZZARD.attachLongPressStart(seinHazzardOn);
+  INP_HAZZARD.attachLongPressStop(seinHazzardOff);
   
   // Inisialisasi OLED
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -162,6 +207,7 @@ void loop() {
 
  INP_LEFT.tick();
  INP_RIGHT.tick();
+ INP_HAZZARD.tick();
  
  static uint8_t count = 0;
  uint32_t tmr         = millis();
@@ -332,31 +378,45 @@ void showTemperatur(){
 }
 
 //menampilkan sein diLCD
-void showSein(bool Direction,bool Mode){
-  if(Mode){
-    if(Direction){
-      display.drawBitmap(90, 0, icon_sein_right, 40, 40, WHITE);//kanan hidup
-      display.drawBitmap(0, 0, icon_sein_left, 40, 40, WHITE);//kiri hidup
-     }
-    else{
-      display.drawBitmap(0, 0, icon_sein_left, 40, 40, WHITE);//kiri hidup
-      display.drawBitmap(90, 0, icon_sein_right, 40, 40, WHITE);//kanan hidup
-    }
+void showSein(uint8_t Direction,bool Mode){
+  if(Mode){ 
+    switch(Direction){
+      case 0 : //sein kiri hidup
+        display.drawBitmap(0, 0, icon_sein_left, 40, 40, WHITE);//kiri hidup
+        display.drawBitmap(90, 0, icon_sein_right, 40, 40, WHITE);//kanan hidup
+      break;
+      case 1 : //sein kanan hidup
+        display.drawBitmap(90, 0, icon_sein_right, 40, 40, WHITE);//kanan hidup
+        display.drawBitmap(0, 0, icon_sein_left, 40, 40, WHITE);//kiri hidup
+      break;
+      case 2 : //sein hazzard hidup
+        display.drawBitmap(0, 0, icon_sein_left, 40, 40, WHITE);//kiri hidup
+        display.drawBitmap(90, 0, icon_sein_right, 40, 40, WHITE);//kanan hidup
+      break;
+    };
     display.drawBitmap(50, 0, icon_lamp_on, 32, 32, WHITE);
-  }else{
-    if(Direction){
-      display.drawBitmap(90, 0, icon_sein_right, 40, 40, BLACK);//kanan mati
-      display.drawBitmap(0, 0, icon_sein_left, 40, 40, WHITE);//KIRI HIDUP
-     }
-    else{
-      display.drawBitmap(0, 0, icon_sein_left, 40, 40, BLACK);
-      display.drawBitmap(90, 0, icon_sein_right, 40, 40, WHITE);
-    }
+  }
+  else{ 
+    switch(Direction){
+      case 0 : //sein kiri mati
+        display.drawBitmap(0, 0, icon_sein_left, 40, 40, BLACK);//kiri mati
+        display.drawBitmap(90, 0, icon_sein_right, 40, 40, WHITE);//kanan hidup
+      break;
+      case 1 : //sein kanan mati
+        display.drawBitmap(90, 0, icon_sein_right, 40, 40, BLACK);//kanan mati
+        display.drawBitmap(0, 0, icon_sein_left, 40, 40, WHITE);//KIRI HIDUP
+      break;
+      case 2 : //sein hazzard mati
+        display.drawBitmap(0, 0, icon_sein_left, 40, 40, BLACK);//kiri mati 
+        display.drawBitmap(90, 0, icon_sein_right, 40, 40, BLACK);//kanan mati
+      break;
+    };
     display.drawBitmap(44, 2, icon_lamp_off, 32, 32, WHITE);
   }
+  
   display.display(); //tampilkan data
  }
-
+ 
 //menampilkan tegangan aki diLCD
 void showVoltage(){
 
